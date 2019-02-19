@@ -15,29 +15,49 @@ const (
 )
 
 func main() {
-	http.HandleFunc("/consultar", ConsultaCEP)
+	http.HandleFunc("/endereco", EnderecoEndpoint)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-//ConsultaCep recebe o cep e realiza a consulta no endpoint da Digipix
-func ConsultaCEP(w http.ResponseWriter, r *http.Request) {
+//EnderecoEndpoint recebe o cep e realiza a consulta no endpoint da Digipix
+func EnderecoEndpoint(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Inicialdo consulta de CEP...")
 
+	endereco, status, err := ConsultarEndereco(r.FormValue("cep"))
+	if err != nil {
+		log.Printf(err.Error())
+		http.Error(w, "Erro interno", status)
+		return
+	}
+
+	//Retorna o json do endereço recebido
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	err = json.NewEncoder(w).Encode(endereco)
+	if err != nil {
+		log.Printf("Erro ao escrever o json no response: %v", err)
+		http.Error(w, "Erro interno", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Consulta de CEP concluída")
+}
+
+func ConsultarEndereco(cep string) (Address, int, error) {
+	var (
+		endereco Address
+		err      error
+	)
 	//Valida e trata o cep informado
-	cepField := r.FormValue("cep")
 	numbers, err := regexp.Compile("[^0-9]+")
 	if err != nil {
-		ServerError(w, fmt.Sprintf("Erro ao compilar a regex: %v", err))
-		return
+		return endereco, http.StatusInternalServerError, fmt.Errorf("Erro ao compilar a regex: %v", err)
 	}
-	cep := numbers.ReplaceAllString(cepField, "")
+	cep = numbers.ReplaceAllString(cep, "")
 	if cep == "" {
-		http.Error(w, "CEP não preenchido", http.StatusBadRequest)
-		return
+		return endereco, http.StatusBadRequest, fmt.Errorf("CEP não preenchido")
 	}
 	if len(cep) != 8 {
-		http.Error(w, "Tamanho inválido do CEP", http.StatusBadRequest)
-		return
+		return endereco, http.StatusBadRequest, fmt.Errorf("Tamanho inválido do CEP")
 	}
 	log.Printf("Buscando CEP '%s'...", cep)
 
@@ -48,8 +68,7 @@ func ConsultaCEP(w http.ResponseWriter, r *http.Request) {
 	//Constrói a requisição
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		ServerError(w, fmt.Sprintf("Erro ao construir a requisição: %v", err))
-		return
+		return endereco, http.StatusInternalServerError, fmt.Errorf(fmt.Sprintf("Erro ao construir a requisição: %v", err))
 	}
 
 	//Adiciona o token de autenticação JWT
@@ -59,15 +78,13 @@ func ConsultaCEP(w http.ResponseWriter, r *http.Request) {
 	client := http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		ServerError(w, fmt.Sprintf("Erro ao enviar requisição ao endpoint digipix: %v", err))
-		return
+		return endereco, http.StatusInternalServerError, fmt.Errorf("Erro ao enviar requisição ao endpoint digipix: %v", err)
 	}
 
 	//Faz o dump do response
 	dump, err := httputil.DumpResponse(resp, true)
 	if err != nil {
-		ServerError(w, fmt.Sprintf("Erro ao realizar o dump do response: %v", err))
-		return
+		return endereco, http.StatusInternalServerError, fmt.Errorf("Erro ao realizar o dump do response: %v", err)
 	}
 	log.Printf("Response: %s", dump)
 
@@ -75,38 +92,22 @@ func ConsultaCEP(w http.ResponseWriter, r *http.Request) {
 	switch resp.StatusCode {
 	case http.StatusOK:
 		//Decodifica o endereço recebido
-		var endereco Address
 		err = json.NewDecoder(resp.Body).Decode(&endereco)
 		if err != nil {
-			ServerError(w, fmt.Sprintf("Erro ao decodificar o json de retorno: %v", err))
-			return
+			return endereco, http.StatusInternalServerError, fmt.Errorf("Erro ao decodificar o json de retorno: %v", err)
+		}
+		if endereco.NaoPreenchido() {
+			return endereco, http.StatusNotFound, fmt.Errorf("Endereço não encontrado.")
 		}
 		log.Printf("Endereco: %#v", endereco)
-
-		//Retorna o json do endereço recebido
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		err = json.NewEncoder(w).Encode(endereco)
-		if err != nil {
-			ServerError(w, fmt.Sprintf("Erro ao escrever o json no response: %v", err))
-			return
-		}
 	case http.StatusUnauthorized:
-		w.Write([]byte("Acesso não autorizado"))
-		return
+		return endereco, http.StatusUnauthorized, fmt.Errorf("Acesso não autorizado")
 	case http.StatusNotFound:
-		w.Write([]byte("CEP não encontrado"))
-		return
+		return endereco, http.StatusNotFound, fmt.Errorf("CEP não encontrado")
 	default:
-		ServerError(w, fmt.Sprintf("Status de retorno não mapeado: %v", resp.StatusCode))
-		return
+		return endereco, http.StatusInternalServerError, fmt.Errorf("Status de retorno não mapeado: %v", resp.StatusCode)
 	}
-	log.Printf("Consulta de CEP concluída")
-}
-
-//ServerError retorna status InternalServerError e loga o erro
-func ServerError(w http.ResponseWriter, msg string) {
-	http.Error(w, "Erro interno", http.StatusInternalServerError)
-	log.Printf(msg)
+	return endereco, http.StatusOK, nil
 }
 
 //Address estrutura de retorno da consulta de CEP
@@ -118,4 +119,8 @@ type Address struct {
 	IBGE           string `json:"ibge"`
 	AdditionalInfo string `json:"additional_info"`
 	Bairro         string `json:"bairro"`
+}
+
+func (end *Address) NaoPreenchido() bool {
+	return end.State == "" && end.City == "" && end.Neighborhood == "" && end.Street == "" && end.IBGE == "" && end.AdditionalInfo == "" && end.Bairro == ""
 }
