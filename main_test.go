@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -16,20 +20,41 @@ type CenarioDeTeste struct {
 func TestConsultarEndereco(t *testing.T) {
 	//Cria o servidor de teste (mock para o recurso de consulta da Digipix)
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cep := r.FormValue("cep")
+		var cep string
+		partes := strings.Split(r.RequestURI, "/")
+		if len(partes) > 1 {
+			cep = partes[1]
+		}
+		log.Printf(cep)
 		switch cep {
 		case "":
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 		case "12234576890963":
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 		case "04147020":
+			end := Address{
+				State:        "SP",
+				City:         "São Paulo",
+				Neighborhood: "Vila do Bosque",
+				Street:       "R Alfredo de S O Netto",
+			}
+			_ = json.NewEncoder(w).Encode(&end)
 		case "00000000":
+			http.Error(w, "Não encontrado", http.StatusNotFound)
+		case "06381340":
 			http.Error(w, "Não autorizado", http.StatusUnauthorized)
 		default:
 			http.Error(w, "Não implementado", http.StatusNotImplemented)
 		}
 	}))
 	defer ts.Close()
+
+	//Sobrescreve o serviço com a URL do mock e volta com o valor original no final
+	original := DigipixURL
+	DigipixURL = fmt.Sprintf("%s/", ts.URL)
+	defer func() {
+		DigipixURL = original
+	}()
 
 	//Monta os cenários de teste
 	cenarios := []CenarioDeTeste{
@@ -47,27 +72,28 @@ func TestConsultarEndereco(t *testing.T) {
 			Endereco:        Address{},
 			TemErro:         true,
 		},
-		//Cenário 2: cep encontrado
+		//Cenário 2: endereco encontrado
 		CenarioDeTeste{
 			Cep:             "04147020",
 			StatusDeRetorno: 200,
 			Endereco: Address{
+				State:        "SP",
 				City:         "São Paulo",
 				Neighborhood: "Vila do Bosque",
 				Street:       "R Alfredo de S O Netto",
 			},
 			TemErro: false,
 		},
-		//Cenário 3: cep não encontrado
+		//Cenário 3: endereço não encontrado
 		CenarioDeTeste{
 			Cep:             "00000000",
 			StatusDeRetorno: 404,
 			Endereco:        Address{},
 			TemErro:         true,
 		},
-		//Cenário 4: não autorizado
+		//Cenário 4: acesso não autorizado
 		CenarioDeTeste{
-			Cep:             "04147020",
+			Cep:             "06381340",
 			StatusDeRetorno: 401,
 			Endereco:        Address{},
 			TemErro:         true,

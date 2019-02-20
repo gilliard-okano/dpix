@@ -9,18 +9,20 @@ import (
 	"regexp"
 )
 
-const (
-	digipixEndpoint = "https://service-homolog.digipix.com.br/v0b/shipments/zipcode/"
-	jwtToken        = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJkZXNmaW8uZm90b3JlZ2lzdHJvLmNvbS5iciIsImV4cCI6MTU3NzU1NDEzMywianRpIjoiNzBlODRlZmQtMGRmNC00ZmZhLTlmYTYtNTI1M2ZjNmFmMDgyIiwiaWF0IjoxNTQ2NDUwMTMzLCJpc3MiOiJodHRwczovL3NlcnZpY2UtaG9tb2xvZy5kaWdpcGl4LmNvbS5iciIsInN0b3JlSWQiOjc5LCJzdG9yZU5hbWUiOiJGb3RvcmVnaXN0cm8iLCJzdG9yZVVSTCI6ImRlc2Zpby5mb3RvcmVnaXN0cm8uY29tLmJyIn0.yPFKdRdc4jTAUuziqfkvJm74W5axDelkaH-Q6lBTE8k"
+var (
+	//DigipixURL url do serviço de consulta de cep
+	DigipixURL = "https://service-homolog.digipix.com.br/v0b/shipments/zipcode/"
+	//JwtToken token de consulta de serviço
+	JwtToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJkZXNmaW8uZm90b3JlZ2lzdHJvLmNvbS5iciIsImV4cCI6MTU3NzU1NDEzMywianRpIjoiNzBlODRlZmQtMGRmNC00ZmZhLTlmYTYtNTI1M2ZjNmFmMDgyIiwiaWF0IjoxNTQ2NDUwMTMzLCJpc3MiOiJodHRwczovL3NlcnZpY2UtaG9tb2xvZy5kaWdpcGl4LmNvbS5iciIsInN0b3JlSWQiOjc5LCJzdG9yZU5hbWUiOiJGb3RvcmVnaXN0cm8iLCJzdG9yZVVSTCI6ImRlc2Zpby5mb3RvcmVnaXN0cm8uY29tLmJyIn0.yPFKdRdc4jTAUuziqfkvJm74W5axDelkaH-Q6lBTE8k"
 )
 
 func main() {
-	http.HandleFunc("/endereco", EnderecoEndpoint)
+	http.HandleFunc("/endereco", ServicoDeEndereco)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-//EnderecoEndpoint recebe o cep e realiza a consulta no endpoint da Digipix
-func EnderecoEndpoint(w http.ResponseWriter, r *http.Request) {
+//ServicoDeEndereco recebe o cep e realiza a consulta no endpoint da Digipix
+func ServicoDeEndereco(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Inicialdo consulta de CEP...")
 
 	endereco, status, err := ConsultarEndereco(r.FormValue("cep"))
@@ -42,17 +44,18 @@ func EnderecoEndpoint(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Consulta de CEP concluída")
 }
 
+//ConsultarEndereco realiza a consulta do endereco no serviço da Digipix
 func ConsultarEndereco(cep string) (Address, int, error) {
 	var (
 		endereco Address
 		err      error
 	)
 	//Valida e trata o cep informado
-	numbers, err := regexp.Compile("[^0-9]+")
+	digitos, err := regexp.Compile("[^0-9]+")
 	if err != nil {
 		return endereco, http.StatusInternalServerError, fmt.Errorf("Erro ao compilar a regex: %v", err)
 	}
-	cep = numbers.ReplaceAllString(cep, "")
+	cep = digitos.ReplaceAllString(cep, "")
 	if cep == "" {
 		return endereco, http.StatusBadRequest, fmt.Errorf("CEP não preenchido")
 	}
@@ -62,7 +65,7 @@ func ConsultarEndereco(cep string) (Address, int, error) {
 	log.Printf("Buscando CEP '%s'...", cep)
 
 	//Monta o endereço de consulta
-	url := fmt.Sprintf("%s%s", digipixEndpoint, cep)
+	url := fmt.Sprintf("%s%s", DigipixURL, cep)
 	log.Printf("Enviando requisição para: %s", url)
 
 	//Constrói a requisição
@@ -72,7 +75,7 @@ func ConsultarEndereco(cep string) (Address, int, error) {
 	}
 
 	//Adiciona o token de autenticação JWT
-	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", jwtToken))
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", JwtToken))
 
 	//Realiza a requisição de consulta do CEP
 	client := http.Client{}
@@ -97,7 +100,7 @@ func ConsultarEndereco(cep string) (Address, int, error) {
 			return endereco, http.StatusInternalServerError, fmt.Errorf("Erro ao decodificar o json de retorno: %v", err)
 		}
 		if endereco.NaoPreenchido() {
-			return endereco, http.StatusNotFound, fmt.Errorf("Endereço não encontrado.")
+			return endereco, http.StatusNotFound, fmt.Errorf("Endereço não encontrado")
 		}
 		log.Printf("Endereco: %#v", endereco)
 	case http.StatusUnauthorized:
@@ -112,7 +115,7 @@ func ConsultarEndereco(cep string) (Address, int, error) {
 
 //Address estrutura de retorno da consulta de CEP
 type Address struct {
-	State          string `json:"state"`
+	State          string `json:"state_short"`
 	City           string `json:"city"`
 	Neighborhood   string `json:"neighborhood"`
 	Street         string `json:"street"`
@@ -121,6 +124,7 @@ type Address struct {
 	Bairro         string `json:"bairro"`
 }
 
+//NaoPreenchido verifica se existe algum campo preenchido
 func (end *Address) NaoPreenchido() bool {
 	return end.State == "" && end.City == "" && end.Neighborhood == "" && end.Street == "" && end.IBGE == "" && end.AdditionalInfo == "" && end.Bairro == ""
 }
