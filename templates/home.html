@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Consulta de endereço</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+        integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+</head>
+
+<body>
+    <h2>Consulta de endereço</h2>
+    <div class="container">
+        <form action="/consultar">
+            <div class="input-group">
+                <input type="text" class="form-control" name="cep" placeholder="Digite o endereço...">
+                <div class="input-group-append">
+                    <!-- <button class="btn btn-outline-secondary" type="button" id="button-addon2">Button</button> -->
+                    <input class="btn btn-outline-secondary" type="submit" value="Consultar">
+                </div>
+            </div>
+        </form>
+    </div>
+    <div class="container">
+        <div class="row">
+            Logradouro:
+        </div>
+        <div class="row">
+            Bairro:
+        </div>
+        <div class="row">
+            Cidade:
+        </div>
+        <div class="row">
+            Estado:
+        </div>
+    </div>
+</body>
+
+</html>

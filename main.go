@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"text/template"
 )
 
 var (
@@ -17,8 +18,21 @@ var (
 )
 
 func main() {
-	http.HandleFunc("/endereco", ServicoDeEndereco)
+	http.HandleFunc("/", PaginaInicial)
+	http.HandleFunc("/consultar", ServicoDeEndereco)
 	log.Fatal(http.ListenAndServe(":8080", nil))
+}
+
+//PaginaInicial renderiza a página inicial
+func PaginaInicial(w http.ResponseWriter, r *http.Request) {
+	t, err := template.ParseFiles("templates/home.html")
+	if err != nil {
+		log.Printf("Falha ao carregar o template: %v", err)
+		http.Error(w, "Erro interno", http.StatusInternalServerError)
+		return
+	}
+	contexto := make(map[string]string)
+	t.Execute(w, contexto)
 }
 
 //ServicoDeEndereco recebe o cep e realiza a consulta no endpoint da Digipix
