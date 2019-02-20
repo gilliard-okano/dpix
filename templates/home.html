@@ -8,30 +8,52 @@
 </head>
 
 <body>
-    <h2>Consulta de endereço</h2>
-    <div class="container">
-        <form action="/consultar">
-            <div class="input-group">
-                <input type="text" class="form-control" name="cep" placeholder="Digite o endereço...">
-                <div class="input-group-append">
-                    <!-- <button class="btn btn-outline-secondary" type="button" id="button-addon2">Button</button> -->
-                    <input class="btn btn-outline-secondary" type="submit" value="Consultar">
-                </div>
+    <div class="container" style="padding: 1.5rem">
+        <div class="card">
+            <div class="card-header text-center">
+                <h2>Consulta de endereço</h2>
             </div>
-        </form>
-    </div>
-    <div class="container">
-        <div class="row">
-            Logradouro:
-        </div>
-        <div class="row">
-            Bairro:
-        </div>
-        <div class="row">
-            Cidade:
-        </div>
-        <div class="row">
-            Estado:
+            <div class="card-body">
+                <div class="container">
+                    <form action="/" method="GET">
+                        <div class="input-group">
+                            <input type="text" class="form-control" name="cep" placeholder="Digite o endereço..."
+                                pattern="[0-9]{8}" title="Somente números, 8 dígitos" size="8" minlength="8"
+                                maxlength="8" value="{{if .CEP}}{{.CEP}}{{end}}" required>
+                            <div class="input-group-append">
+                                <input class="btn btn-outline-secondary" type="submit" value="Consultar">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                {{if .Address}}
+                <div class="container" style="padding: 1.5rem">
+                    <div class="row">
+                        <div class="col-2">Logradouro:</div>
+                        <div class="col-10">{{.Address.Street}}</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-2">Bairro:</div>
+                        <div class="col-10">{{.Address.Neighborhood}}</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-2">Cidade:</div>
+                        <div class="col-10">{{.Address.City}}</div>
+                    </div>
+                    <div class="row">
+                        <div class="col-2">Estado:</div>
+                        <div class="col-10">{{.Address.State}}</div>
+                    </div>
+                </div>
+                {{end}}
+                {{if .Msg}}
+                <div class="container" style="padding: 1.5rem">
+                    <div class="alert alert-danger" role="alert">
+                        {{.Msg}}
+                    </div>
+                </div>
+                {{end}}
+            </div>
         </div>
     </div>
 </body>

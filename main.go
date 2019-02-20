@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"regexp"
+	"strings"
 	"text/template"
 )
 
@@ -18,8 +19,7 @@ var (
 )
 
 func main() {
-	http.HandleFunc("/", PaginaInicial)
-	http.HandleFunc("/consultar", ServicoDeEndereco)
+	http.HandleFunc("/", ServicoDeEndereco)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
@@ -31,31 +31,56 @@ func PaginaInicial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Erro interno", http.StatusInternalServerError)
 		return
 	}
-	contexto := make(map[string]string)
-	t.Execute(w, contexto)
+	t.Execute(w, nil)
 }
 
 //ServicoDeEndereco recebe o cep e realiza a consulta no endpoint da Digipix
 func ServicoDeEndereco(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Inicialdo consulta de CEP...")
 
-	endereco, status, err := ConsultarEndereco(r.FormValue("cep"))
-	if err != nil {
-		log.Printf(err.Error())
-		http.Error(w, "Erro interno", status)
+	switch r.Method {
+	case "GET":
+		var (
+			contexto = map[string]interface{}{}
+			cep      = strings.TrimSpace(r.FormValue("cep"))
+			endereco Address
+			status   int
+			err      error
+		)
+
+		if cep != "" {
+			contexto["CEP"] = cep
+			endereco, status, err = ConsultarEndereco(cep)
+			if err != nil {
+				log.Printf("Falhou ao counsultar o endereco: %v", err)
+				contexto["Msg"] = "Erro ao realizar a consulta"
+			}
+			if status == http.StatusOK {
+				contexto["Address"] = endereco
+			}
+			if status == http.StatusNotFound {
+				contexto["Msg"] = "Endereço não encontrado"
+			}
+		}
+		t, err := template.ParseFiles("templates/home.html")
+		if err != nil {
+			log.Printf("Falha ao carregar o template: %v", err)
+			http.Error(w, "Erro interno", http.StatusInternalServerError)
+			return
+		}
+
+		err = t.Execute(w, contexto)
+		if err != nil {
+			log.Printf("Erro ao executar o template: %v", err)
+			http.Error(w, "Erro interno", http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("Consulta de CEP concluída")
+	default:
+		http.Error(w, "Recurso não implementado", http.StatusNotImplemented)
 		return
 	}
-
-	//Retorna o json do endereço recebido
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	err = json.NewEncoder(w).Encode(endereco)
-	if err != nil {
-		log.Printf("Erro ao escrever o json no response: %v", err)
-		http.Error(w, "Erro interno", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("Consulta de CEP concluída")
 }
 
 //ConsultarEndereco realiza a consulta do endereco no serviço da Digipix
@@ -114,13 +139,14 @@ func ConsultarEndereco(cep string) (Address, int, error) {
 			return endereco, http.StatusInternalServerError, fmt.Errorf("Erro ao decodificar o json de retorno: %v", err)
 		}
 		if endereco.NaoPreenchido() {
-			return endereco, http.StatusNotFound, fmt.Errorf("Endereço não encontrado")
+			return endereco, http.StatusNotFound, nil
+		} else {
+			log.Printf("Endereco: %#v", endereco)
 		}
-		log.Printf("Endereco: %#v", endereco)
 	case http.StatusUnauthorized:
 		return endereco, http.StatusUnauthorized, fmt.Errorf("Acesso não autorizado")
 	case http.StatusNotFound:
-		return endereco, http.StatusNotFound, fmt.Errorf("CEP não encontrado")
+		return endereco, http.StatusNotFound, nil
 	default:
 		return endereco, http.StatusInternalServerError, fmt.Errorf("Status de retorno não mapeado: %v", resp.StatusCode)
 	}

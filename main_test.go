@@ -89,7 +89,7 @@ func TestConsultarEndereco(t *testing.T) {
 			Cep:             "00000000",
 			StatusDeRetorno: 404,
 			Endereco:        Address{},
-			TemErro:         true,
+			TemErro:         false,
 		},
 		//Cenário 4: acesso não autorizado
 		CenarioDeTeste{
